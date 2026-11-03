@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+# real participant-derived data must not be committed (dataset license)
+handoff/v*/
+*.pt
+*.pkl
+*.parquet

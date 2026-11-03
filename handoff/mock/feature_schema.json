@@ -1,0 +1,138 @@
+{
+  "release": "mock",
+  "version": "mock",
+  "class_order": [
+    "healthy",
+    "pre_diabetes_lifestyle_controlled",
+    "oral_medication_and_or_non_insulin_injectable_medication_controlled",
+    "insulin_dependent"
+  ],
+  "features": [
+    {
+      "name": "age",
+      "kind": "numeric",
+      "group": "demographic",
+      "unit": "years",
+      "source": "mock"
+    },
+    {
+      "name": "bmi",
+      "kind": "numeric",
+      "group": "anthropometry",
+      "unit": "kg/m2",
+      "source": "mock"
+    },
+    {
+      "name": "waist",
+      "kind": "numeric",
+      "group": "anthropometry",
+      "unit": "cm",
+      "source": "mock"
+    },
+    {
+      "name": "whr",
+      "kind": "numeric",
+      "group": "anthropometry",
+      "unit": "ratio",
+      "source": "mock"
+    },
+    {
+      "name": "sys_bp_1",
+      "kind": "numeric",
+      "group": "vitals",
+      "unit": "mmHg",
+      "source": "mock"
+    },
+    {
+      "name": "dia_bp_1",
+      "kind": "numeric",
+      "group": "vitals",
+      "unit": "mmHg",
+      "source": "mock"
+    },
+    {
+      "name": "pulse_1",
+      "kind": "numeric",
+      "group": "vitals",
+      "unit": "bpm",
+      "source": "mock"
+    },
+    {
+      "name": "hba1c",
+      "kind": "numeric",
+      "group": "glycemic",
+      "unit": "%",
+      "source": "mock"
+    },
+    {
+      "name": "glucose",
+      "kind": "numeric",
+      "group": "glycemic",
+      "unit": "mg/dL",
+      "source": "mock"
+    },
+    {
+      "name": "total_chol",
+      "kind": "numeric",
+      "group": "lipid",
+      "unit": "mg/dL",
+      "source": "mock"
+    },
+    {
+      "name": "hdl",
+      "kind": "numeric",
+      "group": "lipid",
+      "unit": "mg/dL",
+      "source": "mock"
+    },
+    {
+      "name": "triglycerides",
+      "kind": "numeric",
+      "group": "lipid",
+      "unit": "mg/dL",
+      "source": "mock"
+    },
+    {
+      "name": "creatinine",
+      "kind": "numeric",
+      "group": "renal",
+      "unit": "mg/dL",
+      "source": "mock"
+    },
+    {
+      "name": "crp_hs",
+      "kind": "numeric",
+      "group": "other_lab",
+      "unit": "mg/L",
+      "source": "mock"
+    },
+    {
+      "name": "years_education",
+      "kind": "numeric",
+      "group": "survey",
+      "unit": "years",
+      "source": "mock"
+    },
+    {
+      "name": "marital_status",
+      "kind": "categorical",
+      "group": "survey",
+      "unit": "code",
+      "source": "mock"
+    },
+    {
+      "name": "diet_item_1",
+      "kind": "categorical",
+      "group": "survey",
+      "unit": "code",
+      "source": "mock"
+    },
+    {
+      "name": "food_security_1",
+      "kind": "categorical",
+      "group": "survey",
+      "unit": "code",
+      "source": "mock"
+    }
+  ]
+}

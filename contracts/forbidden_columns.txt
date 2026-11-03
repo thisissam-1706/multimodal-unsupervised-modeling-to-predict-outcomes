@@ -1,0 +1,35 @@
+# Column-name patterns that must never appear as features (fnmatch, case-insensitive).
+# Safety net only: Person A is responsible for leakage, this just catches slips.
+
+# identifiers and provenance
+participant_id
+person_id
+studyid
+*uuid*
+*filename*
+*device*
+visit_*
+*date*
+*timestamp*
+
+# target and partition
+study_group
+recommended_split
+split
+
+# collection artefacts
+clinical_site
+site
+has_*
+*_flag
+
+# diagnosis, group-defining answers, treatment proxies
+mhterm_*
+mh_dm_age
+mh_a1c
+cmtrt_*
+paid*
+dml*
+*diagnosis*
+*medication*
+*insulin*

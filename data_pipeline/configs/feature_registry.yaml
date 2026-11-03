@@ -1,0 +1,40 @@
+# Starter registry from plan section 4. Person A confirms every line.
+# status: TO_CONFIRM -> verified | dropped (with reason)
+# Source value strings below come from the plan and may differ in the real data; check them.
+version: 0
+table_measurement:   # OMOP measurement.csv, selector = measurement_source_value, value = value_as_number
+  - {name: bmi,               source: bmi_vsorres,      group: anthropometry, unit: kg/m2, status: TO_CONFIRM}
+  - {name: height,            source: height_vsorres,   group: anthropometry, unit: cm,    status: TO_CONFIRM}
+  - {name: weight,            source: weight_vsorres,   group: anthropometry, unit: kg,    status: TO_CONFIRM}
+  - {name: waist,             source: waist_vsorres,    group: anthropometry, unit: cm,    status: TO_CONFIRM}
+  - {name: hip,               source: hip_vsorres,      group: anthropometry, unit: cm,    status: TO_CONFIRM}
+  - {name: whr,               source: whr_vsorres,      group: anthropometry, unit: ratio, status: TO_CONFIRM}
+  - {name: sys_bp_1,          source: bp1_sysbp_vsorres, group: vitals, unit: mmHg, status: TO_CONFIRM}
+  - {name: dia_bp_1,          source: bp1_diabp_vsorres, group: vitals, unit: mmHg, status: TO_CONFIRM}
+  - {name: sys_bp_2,          source: bp2_sysbp_vsorres, group: vitals, unit: mmHg, status: TO_CONFIRM}
+  - {name: dia_bp_2,          source: bp2_diabp_vsorres, group: vitals, unit: mmHg, status: TO_CONFIRM}
+  - {name: pulse_1,           source: pulse_vsorres,    group: vitals, unit: bpm, status: TO_CONFIRM}
+  - {name: pulse_2,           source: pulse_vsorres_2,  group: vitals, unit: bpm, status: TO_CONFIRM}
+  # labs: exact source strings unknown, look them up in measurement.csv
+  - {name: glucose,           source: "Glucose (mg/dL)",              group: glycemic, unit: mg/dL, status: TO_CONFIRM}
+  - {name: hba1c,             source: "HbA1c (%)",                    group: glycemic, unit: "%",   status: TO_CONFIRM}
+  - {name: total_chol,        source: "Total Cholesterol (mg/dL)",    group: lipid,    unit: mg/dL, status: TO_CONFIRM}
+  - {name: hdl,               source: "HDL Cholesterol (mg/dL)",      group: lipid,    unit: mg/dL, status: TO_CONFIRM}
+  - {name: ldl,               source: "LDL Cholesterol Calculation (mg/dL)", group: lipid, unit: mg/dL, status: TO_CONFIRM}
+  - {name: triglycerides,     source: "Triglycerides (mg/dL)",        group: lipid,    unit: mg/dL, status: TO_CONFIRM}
+  - {name: creatinine,        source: "Creatinine (mg/dL)",           group: renal,    unit: mg/dL, status: TO_CONFIRM}
+  - {name: bun,               source: "BUN (mg/dL)",                  group: renal,    unit: mg/dL, status: TO_CONFIRM}
+  - {name: urine_albumin,     source: "Urine Albumin (mg/dL)",        group: renal,    unit: mg/dL, status: TO_CONFIRM}
+  - {name: urine_creatinine,  source: "Urine Creatinine (mg/dL)",     group: renal,    unit: mg/dL, status: TO_CONFIRM}
+  - {name: crp_hs,            source: "CRP - HS (mg/L)",              group: other_lab, unit: mg/L, status: TO_CONFIRM}
+table_participants:
+  - {name: age,               source: age,              group: demographic, unit: years, status: TO_CONFIRM}
+table_observation:   # OMOP observation.csv, selector = observation_source_value; all categorical codes unless the codebook says otherwise
+  - {name: years_education,   source: years_of_education, group: survey, kind: numeric, status: TO_CONFIRM}
+  - {name: marital_status,    source: cl_maristat,      group: survey, kind: categorical, status: TO_CONFIRM}
+  - {name: diet_items,        source: "diet1..diet9",    group: survey, kind: categorical, status: TO_CONFIRM}
+  - {name: food_security,     source: "pxfi1..pxfi5",    group: survey, kind: categorical, status: TO_CONFIRM}
+  - {name: neighborhood,      source: "pxne1..pxne17",   group: survey, kind: categorical, status: TO_CONFIRM}
+  - {name: access_to_care,    source: "pxahc1..pxahc10", group: survey, kind: categorical, status: TO_CONFIRM}
+# Never add: study_group, recommended_split, ids, dates, clinical_site, modality flags,
+# mhterm_*, mh_dm_age, mh_a1c, cmtrt_*, paid*, dml*, diabetes diagnosis/medication rows.
