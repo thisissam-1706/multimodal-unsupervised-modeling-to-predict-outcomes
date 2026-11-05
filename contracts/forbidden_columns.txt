@@ -22,6 +22,16 @@ clinical_site
 site
 has_*
 *_flag
+# modality-presence flag columns exactly as named in participants.tsv (added in A6: has_*/*_flag did not cover them)
+cardiac_ecg
+clinical_data
+environment
+retinal_flio
+retinal_oct
+retinal_octa
+retinal_photography
+wearable_activity_monitor
+wearable_blood_glucose
 
 # diagnosis, group-defining answers, treatment proxies
 mhterm_*

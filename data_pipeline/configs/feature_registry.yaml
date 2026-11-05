@@ -1,40 +1,2562 @@
-# Starter registry from plan section 4. Person A confirms every line.
-# status: TO_CONFIRM -> verified | dropped (with reason)
-# Source value strings below come from the plan and may differ in the real data; check them.
-version: 0
-table_measurement:   # OMOP measurement.csv, selector = measurement_source_value, value = value_as_number
-  - {name: bmi,               source: bmi_vsorres,      group: anthropometry, unit: kg/m2, status: TO_CONFIRM}
-  - {name: height,            source: height_vsorres,   group: anthropometry, unit: cm,    status: TO_CONFIRM}
-  - {name: weight,            source: weight_vsorres,   group: anthropometry, unit: kg,    status: TO_CONFIRM}
-  - {name: waist,             source: waist_vsorres,    group: anthropometry, unit: cm,    status: TO_CONFIRM}
-  - {name: hip,               source: hip_vsorres,      group: anthropometry, unit: cm,    status: TO_CONFIRM}
-  - {name: whr,               source: whr_vsorres,      group: anthropometry, unit: ratio, status: TO_CONFIRM}
-  - {name: sys_bp_1,          source: bp1_sysbp_vsorres, group: vitals, unit: mmHg, status: TO_CONFIRM}
-  - {name: dia_bp_1,          source: bp1_diabp_vsorres, group: vitals, unit: mmHg, status: TO_CONFIRM}
-  - {name: sys_bp_2,          source: bp2_sysbp_vsorres, group: vitals, unit: mmHg, status: TO_CONFIRM}
-  - {name: dia_bp_2,          source: bp2_diabp_vsorres, group: vitals, unit: mmHg, status: TO_CONFIRM}
-  - {name: pulse_1,           source: pulse_vsorres,    group: vitals, unit: bpm, status: TO_CONFIRM}
-  - {name: pulse_2,           source: pulse_vsorres_2,  group: vitals, unit: bpm, status: TO_CONFIRM}
-  # labs: exact source strings unknown, look them up in measurement.csv
-  - {name: glucose,           source: "Glucose (mg/dL)",              group: glycemic, unit: mg/dL, status: TO_CONFIRM}
-  - {name: hba1c,             source: "HbA1c (%)",                    group: glycemic, unit: "%",   status: TO_CONFIRM}
-  - {name: total_chol,        source: "Total Cholesterol (mg/dL)",    group: lipid,    unit: mg/dL, status: TO_CONFIRM}
-  - {name: hdl,               source: "HDL Cholesterol (mg/dL)",      group: lipid,    unit: mg/dL, status: TO_CONFIRM}
-  - {name: ldl,               source: "LDL Cholesterol Calculation (mg/dL)", group: lipid, unit: mg/dL, status: TO_CONFIRM}
-  - {name: triglycerides,     source: "Triglycerides (mg/dL)",        group: lipid,    unit: mg/dL, status: TO_CONFIRM}
-  - {name: creatinine,        source: "Creatinine (mg/dL)",           group: renal,    unit: mg/dL, status: TO_CONFIRM}
-  - {name: bun,               source: "BUN (mg/dL)",                  group: renal,    unit: mg/dL, status: TO_CONFIRM}
-  - {name: urine_albumin,     source: "Urine Albumin (mg/dL)",        group: renal,    unit: mg/dL, status: TO_CONFIRM}
-  - {name: urine_creatinine,  source: "Urine Creatinine (mg/dL)",     group: renal,    unit: mg/dL, status: TO_CONFIRM}
-  - {name: crp_hs,            source: "CRP - HS (mg/L)",              group: other_lab, unit: mg/L, status: TO_CONFIRM}
-table_participants:
-  - {name: age,               source: age,              group: demographic, unit: years, status: TO_CONFIRM}
-table_observation:   # OMOP observation.csv, selector = observation_source_value; all categorical codes unless the codebook says otherwise
-  - {name: years_education,   source: years_of_education, group: survey, kind: numeric, status: TO_CONFIRM}
-  - {name: marital_status,    source: cl_maristat,      group: survey, kind: categorical, status: TO_CONFIRM}
-  - {name: diet_items,        source: "diet1..diet9",    group: survey, kind: categorical, status: TO_CONFIRM}
-  - {name: food_security,     source: "pxfi1..pxfi5",    group: survey, kind: categorical, status: TO_CONFIRM}
-  - {name: neighborhood,      source: "pxne1..pxne17",   group: survey, kind: categorical, status: TO_CONFIRM}
-  - {name: access_to_care,    source: "pxahc1..pxahc10", group: survey, kind: categorical, status: TO_CONFIRM}
-# Never add: study_group, recommended_split, ids, dates, clinical_site, modality flags,
-# mhterm_*, mh_dm_age, mh_a1c, cmtrt_*, paid*, dml*, diabetes diagnosis/medication rows.
+# Phase 1 feature registry (plan section 4). ONE ENTRY PER FIELD.
+#
+#   status: verified | dropped, with `reason`. Set by `python data_pipeline/src/coverage.py --update-registry`
+#           after checking the entry against the real v2.0.0 files (exists, units, range, coverage). Never edited to hide a failure.
+#   source: exact selector string in the real data (measurement_source_value / observation_source_value). Observation strings are
+#           truncated to 49 characters in the source files themselves. plan_source = string used by the plan/stub, kept for traceability.
+#   range:  clinical plausibility bounds [lo, hi], fixed before modelling. Values outside become empty cells with reason qc_failed.
+#   since:  first handoff version that includes the entry (1 = v1, 2 = v2). v1 is rebuilt from the entries with since <= 1.
+#   hold:   explicit decision to keep an entry in the registry but not build it (status dropped, reason = the hold text).
+#   codebook: what was found about the item's response labels (none are in the local payload) and how its codes are treated.
+#   candidates: plan-listed fields NOT in the primary registry. They are never built until the user approves them.
+# Never add: study_group, recommended_split, ids, dates, clinical_site, modality flags, mhterm_*, mh_dm_age, mh_a1c, cmtrt_*, paid*, dml*,
+# diabetes diagnosis / medication rows.
+version: 3
+release: v2.0.0
+inclusion:
+  min_participant_coverage_for_additions: 0.8
+  applies_to_entries_since: 2
+  rule: An entry added after v1 stays in the registry only if it is verified (exact source exists, unit consistent) AND has a usable value aligned
+    to the index visit for at least this share of participants; otherwise it is marked dropped with the reason. Fixed before any modelling.
+features:
+- name: bmi
+  group: anthropometry
+  kind: numeric
+  dtype: float
+  unit: kg/m2
+  range: [10, 80]
+  table: measurement
+  source: bmi_vsorres, BMI
+  plan_source: bmi_vsorres
+  label: BMI
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day as study_visit_date. Rows dated after study_visit_date are rejected. Repeats: median of valid rows.'
+  missingness: Measured at nearly every visit; absence is not_collected. Zero or implausible values are instrument/entry errors and become empty
+    (qc_failed), never 0.
+  leakage: Body-habitus phenotype measured at the visit; not a diagnosis, group-defining answer or treatment field. Associated with the target
+    legitimately. Derived fields (BMI, WHR) are redundant with height/weight/waist/hip, not leaks. Derived by the site from height and weight.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,065 rows, 1,065 participants); unit blank in source; usable aligned value for 1,064 of 1,067 participants (99.7%);
+    1 rows outside the plausible range or flagged Invalid
+- name: height
+  group: anthropometry
+  kind: numeric
+  dtype: float
+  unit: cm
+  range: [100, 230]
+  table: measurement
+  source: height_vsorres, Height (cm)
+  plan_source: height_vsorres
+  label: Height (cm)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day as study_visit_date. Rows dated after study_visit_date are rejected. Repeats: median of valid rows.'
+  missingness: Measured at nearly every visit; absence is not_collected. Zero or implausible values are instrument/entry errors and become empty
+    (qc_failed), never 0.
+  leakage: Body-habitus phenotype measured at the visit; not a diagnosis, group-defining answer or treatment field. Associated with the target
+    legitimately. Derived fields (BMI, WHR) are redundant with height/weight/waist/hip, not leaks.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,065 rows, 1,065 participants); unit blank in source; usable aligned value for 1,065 of 1,067 participants (99.8%)
+- name: weight
+  group: anthropometry
+  kind: numeric
+  dtype: float
+  unit: kg
+  range: [30, 300]
+  table: measurement
+  source: weight_vsorres, Weight (kilograms)
+  plan_source: weight_vsorres
+  label: Weight (kilograms)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day as study_visit_date. Rows dated after study_visit_date are rejected. Repeats: median of valid rows.'
+  missingness: Measured at nearly every visit; absence is not_collected. Zero or implausible values are instrument/entry errors and become empty
+    (qc_failed), never 0.
+  leakage: Body-habitus phenotype measured at the visit; not a diagnosis, group-defining answer or treatment field. Associated with the target
+    legitimately. Derived fields (BMI, WHR) are redundant with height/weight/waist/hip, not leaks.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,066 rows, 1,066 participants); unit blank in source; usable aligned value for 1,066 of 1,067 participants (99.9%)
+- name: waist
+  group: anthropometry
+  kind: numeric
+  dtype: float
+  unit: cm
+  range: [40, 200]
+  table: measurement
+  source: waist_vsorres, Waist Circumference (cm)
+  plan_source: waist_vsorres
+  label: Waist Circumference (cm)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day as study_visit_date. Rows dated after study_visit_date are rejected. Repeats: median of valid rows.'
+  missingness: Measured at nearly every visit; absence is not_collected. Zero or implausible values are instrument/entry errors and become empty
+    (qc_failed), never 0.
+  leakage: Body-habitus phenotype measured at the visit; not a diagnosis, group-defining answer or treatment field. Associated with the target
+    legitimately. Derived fields (BMI, WHR) are redundant with height/weight/waist/hip, not leaks.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,064 rows, 1,064 participants); unit blank in source; usable aligned value for 1,063 of 1,067 participants (99.6%);
+    1 rows outside the plausible range or flagged Invalid
+- name: hip
+  group: anthropometry
+  kind: numeric
+  dtype: float
+  unit: cm
+  range: [50, 220]
+  table: measurement
+  source: hip_vsorres, Hip Circumference (cm)
+  plan_source: hip_vsorres
+  label: Hip Circumference (cm)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day as study_visit_date. Rows dated after study_visit_date are rejected. Repeats: median of valid rows.'
+  missingness: Measured at nearly every visit; absence is not_collected. Zero or implausible values are instrument/entry errors and become empty
+    (qc_failed), never 0.
+  leakage: Body-habitus phenotype measured at the visit; not a diagnosis, group-defining answer or treatment field. Associated with the target
+    legitimately. Derived fields (BMI, WHR) are redundant with height/weight/waist/hip, not leaks.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,063 rows, 1,063 participants); unit blank in source; usable aligned value for 1,062 of 1,067 participants (99.5%);
+    1 rows outside the plausible range or flagged Invalid
+- name: whr
+  group: anthropometry
+  kind: numeric
+  dtype: float
+  unit: ratio
+  range: [0.4, 1.6]
+  table: measurement
+  source: whr_vsorres, Waist to Hip Ratio (WHR)
+  plan_source: whr_vsorres
+  label: Waist to Hip Ratio (WHR)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day as study_visit_date. Rows dated after study_visit_date are rejected. Repeats: median of valid rows.'
+  missingness: Measured at nearly every visit; absence is not_collected. Zero or implausible values are instrument/entry errors and become empty
+    (qc_failed), never 0.
+  leakage: Body-habitus phenotype measured at the visit; not a diagnosis, group-defining answer or treatment field. Associated with the target
+    legitimately. Derived fields (BMI, WHR) are redundant with height/weight/waist/hip, not leaks. Ratio of waist to hip.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,062 rows, 1,062 participants); unit blank in source; usable aligned value for 1,060 of 1,067 participants (99.3%);
+    2 rows outside the plausible range or flagged Invalid
+- name: sys_bp_1
+  group: vitals
+  kind: numeric
+  dtype: float
+  unit: mmHg
+  range: [60, 260]
+  table: measurement
+  source: bp1_sysbp_vsorres, Systolic (mmHg)
+  plan_source: bp1_sysbp_vsorres
+  label: Systolic (mmHg)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day. Rows dated after study_visit_date are rejected. Reading 1 and reading 2 are separate features and are never averaged.
+  missingness: Recorded at every visit; the second reading is occasionally absent (not_collected). Out-of-range values become empty (qc_failed).
+  leakage: Measured at the visit. Blood pressure can reflect antihypertensive treatment but is not a diabetes treatment proxy.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit blank in source; usable aligned value for 1,067 of 1,067 participants (100.0%)
+- name: dia_bp_1
+  group: vitals
+  kind: numeric
+  dtype: float
+  unit: mmHg
+  range: [30, 160]
+  table: measurement
+  source: bp1_diabp_vsorres, Diastolic (mmHg)
+  plan_source: bp1_diabp_vsorres
+  label: Diastolic (mmHg)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day. Rows dated after study_visit_date are rejected. Reading 1 and reading 2 are separate features and are never averaged.
+  missingness: Recorded at every visit; the second reading is occasionally absent (not_collected). Out-of-range values become empty (qc_failed).
+  leakage: Measured at the visit. Blood pressure can reflect antihypertensive treatment but is not a diabetes treatment proxy.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit blank in source; usable aligned value for 1,067 of 1,067 participants (100.0%)
+- name: sys_bp_2
+  group: vitals
+  kind: numeric
+  dtype: float
+  unit: mmHg
+  range: [60, 260]
+  table: measurement
+  source: bp2_sysbp_vsorres, Systolic (mmHg)
+  plan_source: bp2_sysbp_vsorres
+  label: Systolic (mmHg)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day. Rows dated after study_visit_date are rejected. Reading 1 and reading 2 are separate features and are never averaged.
+  missingness: Recorded at every visit; the second reading is occasionally absent (not_collected). Out-of-range values become empty (qc_failed).
+  leakage: Measured at the visit. Blood pressure can reflect antihypertensive treatment but is not a diabetes treatment proxy.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,064 rows, 1,064 participants); unit blank in source; usable aligned value for 1,064 of 1,067 participants (99.7%)
+- name: dia_bp_2
+  group: vitals
+  kind: numeric
+  dtype: float
+  unit: mmHg
+  range: [30, 160]
+  table: measurement
+  source: bp2_diabp_vsorres, Diastolic (mmHg)
+  plan_source: bp2_diabp_vsorres
+  label: Diastolic (mmHg)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day. Rows dated after study_visit_date are rejected. Reading 1 and reading 2 are separate features and are never averaged.
+  missingness: Recorded at every visit; the second reading is occasionally absent (not_collected). Out-of-range values become empty (qc_failed).
+  leakage: Measured at the visit. Blood pressure can reflect antihypertensive treatment but is not a diabetes treatment proxy.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,064 rows, 1,064 participants); unit blank in source; usable aligned value for 1,064 of 1,067 participants (99.7%)
+- name: pulse_1
+  group: vitals
+  kind: numeric
+  dtype: float
+  unit: bpm
+  range: [30, 200]
+  table: measurement
+  source: pulse_vsorres, Heart Rate (bpm)
+  plan_source: pulse_vsorres
+  label: Heart Rate (bpm)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day. Rows dated after study_visit_date are rejected. Reading 1 and reading 2 are separate features and are never averaged.
+  missingness: Recorded at every visit; the second reading is occasionally absent (not_collected). Out-of-range values become empty (qc_failed).
+  leakage: Measured at the visit. Blood pressure can reflect antihypertensive treatment but is not a diabetes treatment proxy.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit blank in source; usable aligned value for 1,067 of 1,067 participants (100.0%)
+- name: pulse_2
+  group: vitals
+  kind: numeric
+  dtype: float
+  unit: bpm
+  range: [30, 200]
+  table: measurement
+  source: pulse_vsorres_2, Heart Rate (bpm)
+  plan_source: pulse_vsorres_2
+  label: Heart Rate (bpm)
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Assessment-visit measurement. Attached through visit_occurrence_id (visit type 9202) when that visit starts on study_visit_date,
+    otherwise same calendar day. Rows dated after study_visit_date are rejected. Reading 1 and reading 2 are separate features and are never averaged.
+  missingness: Recorded at every visit; the second reading is occasionally absent (not_collected). Out-of-range values become empty (qc_failed).
+  leakage: Measured at the visit. Blood pressure can reflect antihypertensive treatment but is not a diabetes treatment proxy.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,064 rows, 1,064 participants); unit blank in source; usable aligned value for 1,064 of 1,067 participants (99.7%)
+- name: glucose
+  group: glycemic
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [20, 800]
+  table: measurement
+  source: Glucose (mg/dL)
+  plan_source: null
+  label: Glucose
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Biological measurement that may closely reproduce how study groups were assigned (plan section 5). Tagged `glycemic` so Person B can
+    run the with/without-labs ablation. Study team has not confirmed it defines a label. Single lab-draw glucose; fasting status is not recorded
+    in the table.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mg/dL; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: hba1c
+  group: glycemic
+  kind: numeric
+  dtype: float
+  unit: '%'
+  range: [3, 20]
+  table: measurement
+  source: HbA1c (%)
+  plan_source: null
+  label: HbA1c
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Biological measurement that may closely reproduce how study groups were assigned (plan section 5). Tagged `glycemic` so Person B can
+    run the with/without-labs ablation. Study team has not confirmed it defines a label. Rows with value 0 carry value_source_value 'Invalid'.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit %; usable aligned value for 953 of 1,067 participants (89.3%); 8 rows outside
+    the plausible range or flagged Invalid
+- name: total_chol
+  group: lipid
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [50, 600]
+  table: measurement
+  source: Total Cholesterol (mg/dL)
+  plan_source: null
+  label: Total Cholesterol
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Lab value at the visit. Statin use shifts values but no medication field is used. Not group-defining.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mg/dL; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: hdl
+  group: lipid
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [10, 200]
+  table: measurement
+  source: HDL Cholesterol (mg/dL)
+  plan_source: null
+  label: HDL Cholesterol
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Lab value at the visit. Statin use shifts values but no medication field is used. Not group-defining.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mg/dL; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: ldl
+  group: lipid
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [5, 400]
+  table: measurement
+  source: LDL Cholesterol Calculation (mg/dL)
+  plan_source: null
+  label: LDL Cholesterol Calculation
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Lab value at the visit. Statin use shifts values but no medication field is used. Not group-defining. Calculated from the other lipids
+    (collinear with them).
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mg/dL; usable aligned value for 961 of 1,067 participants (90.1%); 2 rows
+    outside the plausible range or flagged Invalid
+- name: triglycerides
+  group: lipid
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [10, 3000]
+  table: measurement
+  source: Triglycerides (mg/dL)
+  plan_source: null
+  label: Triglycerides
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Lab value at the visit. Statin use shifts values but no medication field is used. Not group-defining.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mg/dL; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: creatinine
+  group: renal
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [0.2, 15]
+  table: measurement
+  source: Creatinine (mg/dL)
+  plan_source: null
+  label: Creatinine
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Lab value at the visit. Reflects renal function / albuminuria (a diabetes-related complication marker); not a diagnosis or treatment
+    field. Source unit string is the typo 'md/dL'.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit md/dL; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: bun
+  group: renal
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [2, 150]
+  table: measurement
+  source: BUN (mg/dL)
+  plan_source: null
+  label: BUN
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Lab value at the visit. Reflects renal function / albuminuria (a diabetes-related complication marker); not a diagnosis or treatment
+    field.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mg/dL; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: urine_albumin
+  group: renal
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [0, 5000]
+  table: measurement
+  source: Urine Albumin (mg/dL)
+  plan_source: null
+  label: Urine Albumin
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Lab value at the visit. Reflects renal function / albuminuria (a diabetes-related complication marker); not a diagnosis or treatment
+    field. Source unit string is 'mg/DL'. Genuine zeros occur (value_source_value 0.0).
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,029 rows, 1,029 participants); unit mg/DL; usable aligned value for 964 of 1,067 participants (90.3%)
+- name: urine_creatinine
+  group: renal
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [1, 600]
+  table: measurement
+  source: Urine Creatinine (mg/dL)
+  plan_source: null
+  label: Urine Creatinine
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Lab value at the visit. Reflects renal function / albuminuria (a diabetes-related complication marker); not a diagnosis or treatment
+    field. Source unit string is 'mg/DL'.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,029 rows, 1,029 participants); unit mg/DL; usable aligned value for 964 of 1,067 participants (90.3%); 1 rows
+    outside the plausible range or flagged Invalid
+- name: crp_hs
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: mg/L
+  range: [0, 300]
+  table: measurement
+  source: CRP - HS (mg/L)
+  plan_source: null
+  label: CRP - HS
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Inflammation marker at the visit; not group-defining. High-sensitivity C-reactive protein.
+  codebook: n/a (measurement with a unit in the source or its label)
+  since: 1
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mg/L; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: age
+  group: demographic
+  kind: numeric
+  dtype: int
+  unit: years
+  range: [18, 110]
+  table: participants
+  source: age
+  plan_source: null
+  label: Age at study visit
+  omop:
+    selector_column: participants.tsv:age
+    value_column: age
+    unit_column: null
+    date_column: null
+    visit_column: null
+  temporal_rule: participants.tsv age at the study visit (index date); no alignment needed.
+  missingness: Present for all participants.
+  leakage: Age at visit from participants.tsv. No date of birth or visit date is exposed.
+  codebook: n/a (numeric, participants.tsv)
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit (participants.tsv, years); usable aligned value for 1,067 of 1,067 participants
+    (100.0%)
+- name: years_education
+  group: survey
+  kind: numeric
+  dtype: float
+  unit: years
+  range: [0, 30]
+  table: observation
+  source: years_of_education
+  code: years_of_education
+  plan_source: years_of_education
+  label: years_of_education
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: demographic questionnaire.'
+  codebook: Numeric value; no codebook needed except units/range (not local; bounds are plausibility limits).
+  since: 1
+  status: verified
+  reason: exact source found (1,060 rows, 1,059 participants); unit blank in source; usable aligned value for 1,057 of 1,067 participants (99.1%);
+    2 rows outside the plausible range or flagged Invalid
+- name: marital_status
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: cl_maristat, Marital Status
+  code: cl_maristat
+  plan_source: cl_maristat
+  label: Marital Status
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: demographic questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit blank in source; usable aligned value for 1,057 of 1,067 participants (99.1%)
+- name: diet_item_1
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: diet1, How many times a week did you eat fast foo
+  code: diet1
+  plan_source: diet1
+  label: How many times a week did you eat fast foo
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: Diet questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,004 rows, 1,004 participants); unit blank in source; usable aligned value for 998 of 1,067 participants (93.5%)
+- name: diet_item_2
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: diet2, How many servings of fruit did you eat eac
+  code: diet2
+  plan_source: diet2
+  label: How many servings of fruit did you eat eac
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: Diet questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (993 rows, 993 participants); unit blank in source; usable aligned value for 987 of 1,067 participants (92.5%)
+- name: diet_item_3
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: diet3, How many servings of vegetables did you ea
+  code: diet3
+  plan_source: diet3
+  label: How many servings of vegetables did you ea
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: Diet questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,004 rows, 1,004 participants); unit blank in source; usable aligned value for 998 of 1,067 participants (93.5%)
+- name: diet_item_4
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: diet4, How many regular sodas or glasses of sweet
+  code: diet4
+  plan_source: diet4
+  label: How many regular sodas or glasses of sweet
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: Diet questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,004 rows, 1,004 participants); unit blank in source; usable aligned value for 998 of 1,067 participants (93.5%)
+- name: diet_item_5
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: diet5, How many times a week did you eat beans (l
+  code: diet5
+  plan_source: diet5
+  label: How many times a week did you eat beans (l
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: Diet questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,004 rows, 1,004 participants); unit blank in source; usable aligned value for 998 of 1,067 participants (93.5%)
+- name: diet_item_6
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: 'diet6, How many times a week did you eat regular '
+  code: diet6
+  plan_source: diet6
+  label: How many times a week did you eat regular
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: Diet questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,004 rows, 1,004 participants); unit blank in source; usable aligned value for 998 of 1,067 participants (93.5%)
+- name: diet_item_7
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: diet7, How many times a week did you eat desserts
+  code: diet7
+  plan_source: diet7
+  label: How many times a week did you eat desserts
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: Diet questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,004 rows, 1,004 participants); unit blank in source; usable aligned value for 998 of 1,067 participants (93.5%)
+- name: diet_item_8
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: diet8, How much margarine, butter, or meat fat do
+  code: diet8
+  plan_source: diet8
+  label: How much margarine, butter, or meat fat do
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: Diet questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,004 rows, 1,004 participants); unit blank in source; usable aligned value for 998 of 1,067 participants (93.5%)
+- name: diet_item_9
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: diet9, How many servings of fruit juice did you d
+  code: diet9
+  plan_source: diet9
+  label: How many servings of fruit juice did you d
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: Diet questionnaire.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,004 rows, 1,004 participants); unit blank in source; usable aligned value for 998 of 1,067 participants (93.5%)
+- name: food_security_1
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxfi1, The first statement is, "The food that (I/
+  code: pxfi1
+  plan_source: pxfi1
+  label: The first statement is, "The food that (I/
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX food insecurity.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit blank in source; usable aligned value for 1,056 of 1,067 participants (99.0%)
+- name: food_security_2
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxfi2, "(I/we) couldn't afford to eat balanced me
+  code: pxfi2
+  plan_source: pxfi2
+  label: '"(I/we) couldn''t afford to eat balanced me'
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX food insecurity.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit blank in source; usable aligned value for 1,056 of 1,067 participants (99.0%)
+- name: food_security_3
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxfi3, In the last year, did you and/or other adu
+  code: pxfi3
+  plan_source: pxfi3
+  label: In the last year, did you and/or other adu
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX food insecurity.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit blank in source; usable aligned value for 1,056 of 1,067 participants (99.0%)
+- name: food_security_4
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxfi4, In the last 12 months, did you ever eat le
+  code: pxfi4
+  plan_source: pxfi4
+  label: In the last 12 months, did you ever eat le
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX food insecurity.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit blank in source; usable aligned value for 1,056 of 1,067 participants (99.0%)
+- name: food_security_5
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxfi5, In the last 12 months, were you ever hungr
+  code: pxfi5
+  plan_source: pxfi5
+  label: In the last 12 months, were you ever hungr
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX food insecurity.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (1,067 rows, 1,067 participants); unit blank in source; usable aligned value for 1,056 of 1,067 participants (99.0%)
+- name: neighborhood_1
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne1, What is the main type of housing in your n
+  code: pxne1
+  plan_source: pxne1
+  label: What is the main type of housing in your n
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_2
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne2, Many shops, stores, markets or other place
+  code: pxne2
+  plan_source: pxne2
+  label: Many shops, stores, markets or other place
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_3
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne3, It is within a 10-15 minute walk to a tran
+  code: pxne3
+  plan_source: pxne3
+  label: It is within a 10-15 minute walk to a tran
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_4
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne4, There are sidewalks on most of the streets
+  code: pxne4
+  plan_source: pxne4
+  label: There are sidewalks on most of the streets
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_5
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne5, There are facilities to bicycle in or near
+  code: pxne5
+  plan_source: pxne5
+  label: There are facilities to bicycle in or near
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_6
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne6, My neighborhood has several free or low co
+  code: pxne6
+  plan_source: pxne6
+  label: My neighborhood has several free or low co
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_7
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne7, The crime rate in my neighborhood makes it
+  code: pxne7
+  plan_source: pxne7
+  label: The crime rate in my neighborhood makes it
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_8
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne8, There is so much traffic on the streets th
+  code: pxne8
+  plan_source: pxne8
+  label: There is so much traffic on the streets th
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_9
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: 'pxne9, I see many people being physically active '
+  code: pxne9
+  plan_source: pxne9
+  label: I see many people being physically active
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_10
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne10, There are many interesting things to look
+  code: pxne10
+  plan_source: pxne10
+  label: There are many interesting things to look
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_11
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: 'pxne11, How many motor vehicles in working order '
+  code: pxne11
+  plan_source: pxne11
+  label: How many motor vehicles in working order
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_12
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: 'pxne12, There are many four-way intersections in '
+  code: pxne12
+  plan_source: pxne12
+  label: There are many four-way intersections in
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_13
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne13, The sidewalks in my neighborhood are well
+  code: pxne13
+  plan_source: pxne13
+  label: The sidewalks in my neighborhood are well
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_14
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne14, Places for bicycling (such as bike paths)
+  code: pxne14
+  plan_source: pxne14
+  label: Places for bicycling (such as bike paths)
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_15
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne15, There is so much traffic on the streets t
+  code: pxne15
+  plan_source: pxne15
+  label: There is so much traffic on the streets t
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_16
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne16, The crime rate in my neighborhood makes i
+  code: pxne16
+  plan_source: pxne16
+  label: The crime rate in my neighborhood makes i
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: neighborhood_17
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxne17, There are many places to go within easy w
+  code: pxne17
+  plan_source: pxne17
+  label: There are many places to go within easy w
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX neighbourhood environment.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (971 rows, 971 participants); unit blank in source; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: access_to_care_1
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxahc1, About how long has it been since you last
+  code: pxahc1
+  plan_source: pxahc1
+  label: About how long has it been since you last
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (900 rows, 900 participants); unit blank in source; usable aligned value for 893 of 1,067 participants (83.7%)
+- name: access_to_care_2
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxahc2, Was this a wellness visit, physical, or g
+  code: pxahc2
+  plan_source: pxahc2
+  label: Was this a wellness visit, physical, or g
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (895 rows, 895 participants); unit blank in source; usable aligned value for 888 of 1,067 participants (83.2%)
+- name: access_to_care_3
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxahc3, About how long has it been since you last
+  code: pxahc3
+  plan_source: pxahc3
+  label: About how long has it been since you last
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (117 rows, 117 participants); unit blank in source; usable aligned value for 117 of 1,067 participants (11.0%)
+- name: access_to_care_4
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxahc4, Is there a place that you USUALLY go to i
+  code: pxahc4
+  plan_source: pxahc4
+  label: Is there a place that you USUALLY go to i
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (783 rows, 783 participants); unit blank in source; usable aligned value for 776 of 1,067 participants (72.7%)
+- name: access_to_care_5
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxahc5, What kind of place is it/do you go to mos
+  code: pxahc5
+  plan_source: pxahc5
+  label: What kind of place is it/do you go to mos
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (890 rows, 890 participants); unit blank in source; usable aligned value for 883 of 1,067 participants (82.8%)
+- name: access_to_care_6
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxahc6, During the past 12 months, how many times
+  code: pxahc6
+  plan_source: pxahc6
+  label: During the past 12 months, how many times
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (10 rows, 10 participants); unit blank in source; usable aligned value for 10 of 1,067 participants (0.9%)
+- name: access_to_care_7
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxahc7, During the past 12 months, how many times
+  code: pxahc7
+  plan_source: pxahc7
+  label: During the past 12 months, how many times
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (900 rows, 900 participants); unit blank in source; usable aligned value for 893 of 1,067 participants (83.7%)
+- name: access_to_care_8
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: 'pxahc8, During the past 12 months, have you been '
+  code: pxahc8
+  plan_source: pxahc8
+  label: During the past 12 months, have you been
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (900 rows, 900 participants); unit blank in source; usable aligned value for 893 of 1,067 participants (83.7%)
+- name: access_to_care_9
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxahc9, During the past 12 months, have you DELAY
+  code: pxahc9
+  plan_source: pxahc9
+  label: During the past 12 months, have you DELAY
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (900 rows, 900 participants); unit blank in source; usable aligned value for 893 of 1,067 participants (83.7%)
+- name: access_to_care_10
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxahc10, During the past 12 months, was there any
+  code: pxahc10
+  plan_source: pxahc10
+  label: During the past 12 months, was there any
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: PhenX access to health care.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 1
+  status: verified
+  reason: exact source found (900 rows, 900 participants); unit blank in source; usable aligned value for 893 of 1,067 participants (83.7%)
+- name: alt
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: IU/L
+  range: [1, 2000]
+  table: measurement
+  source: ALT (IU/L)
+  plan_source: null
+  label: ALT
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used. Liver enzyme.
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit IU/L; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: ast
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: IU/L
+  range: [1, 2000]
+  table: measurement
+  source: AST (IU/L)
+  plan_source: null
+  label: AST
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used. Liver enzyme.
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit IU/L; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: albumin
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: g/dL
+  range: [1.0, 6.5]
+  table: measurement
+  source: Albumin (g/dL)
+  plan_source: null
+  label: Albumin
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit g/dL; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: total_protein
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: g/dL
+  range: [3, 12]
+  table: measurement
+  source: Protein, Total (g/dL)
+  plan_source: null
+  label: Protein, Total
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit g/dL; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: bilirubin_total
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [0.1, 30]
+  table: measurement
+  source: Bilirubin, Total (mg/dL)
+  plan_source: null
+  label: Bilirubin, Total
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mg/dL; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: calcium
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: mg/dL
+  range: [5, 15]
+  table: measurement
+  source: Calcium (mg/dL)
+  plan_source: null
+  label: Calcium
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: 'Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes
+    complications or treatment (for example metformin), but no medication field is used. One source row is 0 (not flagged Invalid): below the
+    plausible range, so it becomes empty (qc_failed).'
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mg/dL; usable aligned value for 962 of 1,067 participants (90.2%); 1 rows
+    outside the plausible range or flagged Invalid
+- name: sodium
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: mEq/L
+  range: [110, 170]
+  table: measurement
+  source: Sodium (mEq/L)
+  plan_source: null
+  label: Sodium
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mEq/L; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: potassium
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: mEq/L
+  range: [2, 8]
+  table: measurement
+  source: Potassium (mEq/L)
+  plan_source: null
+  label: Potassium
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used. One source value of 10 mEq/L is above the plausible range, so it becomes
+    empty (qc_failed).
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mEq/L; usable aligned value for 962 of 1,067 participants (90.2%); 1 rows
+    outside the plausible range or flagged Invalid
+- name: chloride
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: mEq/L
+  range: [70, 130]
+  table: measurement
+  source: Chloride (mEq/L)
+  plan_source: null
+  label: Chloride
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mEq/L; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: co2_total
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: mEq/L
+  range: [5, 45]
+  table: measurement
+  source: Carbon Dioxide, Total (mEq/L)
+  plan_source: null
+  label: Carbon Dioxide, Total
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: 'Lab-draw visit (type 32036). Attached through visit_occurrence_id only if that visit starts on study_visit_date (same-visit
+    rule); a lab drawn on another day, before or after, is not_aligned and left empty. Rows dated after study_visit_date are rejected. Repeats:
+    median of valid rows.'
+  missingness: About 6% of participants had the lab drawn on a different day than the index visit (not_aligned); a few more are blank or flagged
+    Invalid (qc_failed). Never imputed here; Person B imputes on train only.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value with a unit in the source)
+  since: 2
+  status: verified
+  reason: exact source found (1,027 rows, 1,027 participants); unit mEq/L; usable aligned value for 963 of 1,067 participants (90.3%)
+- name: hemoglobin
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: g/dL
+  range: [4, 25]
+  table: measurement
+  source: lbscat_a1c, Hemoglobin - g/dL
+  plan_source: null
+  label: Hemoglobin - g/dL
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: CBC row. Linked by visit_occurrence_id to the assessment visit (9202), but its own date is often after study_visit_date (result
+    date), and a row dated after the index date is rejected (no post-index events). Aligned only when its own date is on or before the index date.
+  missingness: About 45% of participants have the CBC result dated after the index date (not_aligned); a few are blank. Never imputed here.
+  leakage: 'Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes
+    complications or treatment (for example metformin), but no medication field is used. WARNING: the source CODE says a1c but the label and the
+    values are haemoglobin (g/dL, median about 14); it is NOT HbA1c.'
+  codebook: n/a (laboratory value; unit taken from the source label)
+  since: 2
+  status: dropped
+  reason: verified (exact source found, 1,027 rows) but only 568 of 1,067 participants (53.2%) have a usable value aligned to the index visit,
+    below the 80% inclusion threshold for additions
+- name: hematocrit
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: '%'
+  range: [15, 65]
+  table: measurement
+  source: lbscat_hct, Hematocrit  - %
+  plan_source: null
+  label: Hematocrit  - %
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: CBC row. Linked by visit_occurrence_id to the assessment visit (9202), but its own date is often after study_visit_date (result
+    date), and a row dated after the index date is rejected (no post-index events). Aligned only when its own date is on or before the index date.
+  missingness: About 45% of participants have the CBC result dated after the index date (not_aligned); a few are blank. Never imputed here.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used. The source string contains a non-breaking space.
+  codebook: n/a (laboratory value; unit taken from the source label)
+  since: 2
+  status: dropped
+  reason: verified (exact source found, 1,027 rows) but only 568 of 1,067 participants (53.2%) have a usable value aligned to the index visit,
+    below the 80% inclusion threshold for additions
+- name: mch
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: pg
+  range: [15, 45]
+  table: measurement
+  source: lbscat_mch, MCH - pg
+  plan_source: null
+  label: MCH - pg
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: CBC row. Linked by visit_occurrence_id to the assessment visit (9202), but its own date is often after study_visit_date (result
+    date), and a row dated after the index date is rejected (no post-index events). Aligned only when its own date is on or before the index date.
+  missingness: About 45% of participants have the CBC result dated after the index date (not_aligned); a few are blank. Never imputed here.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value; unit taken from the source label)
+  since: 2
+  status: dropped
+  reason: verified (exact source found, 1,027 rows) but only 568 of 1,067 participants (53.2%) have a usable value aligned to the index visit,
+    below the 80% inclusion threshold for additions
+- name: mchc
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: g/dL
+  range: [25, 40]
+  table: measurement
+  source: lbscat_mchc, MCHC - g/dL
+  plan_source: null
+  label: MCHC - g/dL
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: CBC row. Linked by visit_occurrence_id to the assessment visit (9202), but its own date is often after study_visit_date (result
+    date), and a row dated after the index date is rejected (no post-index events). Aligned only when its own date is on or before the index date.
+  missingness: About 45% of participants have the CBC result dated after the index date (not_aligned); a few are blank. Never imputed here.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value; unit taken from the source label)
+  since: 2
+  status: dropped
+  reason: verified (exact source found, 1,027 rows) but only 568 of 1,067 participants (53.2%) have a usable value aligned to the index visit,
+    below the 80% inclusion threshold for additions
+- name: mcv
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: fL
+  range: [50, 130]
+  table: measurement
+  source: lbscat_mcv, MCV - fL
+  plan_source: null
+  label: MCV - fL
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: CBC row. Linked by visit_occurrence_id to the assessment visit (9202), but its own date is often after study_visit_date (result
+    date), and a row dated after the index date is rejected (no post-index events). Aligned only when its own date is on or before the index date.
+  missingness: About 45% of participants have the CBC result dated after the index date (not_aligned); a few are blank. Never imputed here.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value; unit taken from the source label)
+  since: 2
+  status: dropped
+  reason: verified (exact source found, 1,027 rows) but only 567 of 1,067 participants (53.1%) have a usable value aligned to the index visit,
+    below the 80% inclusion threshold for additions
+- name: platelets
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: x10E3/uL
+  range: [10, 1500]
+  table: measurement
+  source: lbscat_plt, Platelets - x10E3/µL
+  plan_source: null
+  label: Platelets - x10E3/µL
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: CBC row. Linked by visit_occurrence_id to the assessment visit (9202), but its own date is often after study_visit_date (result
+    date), and a row dated after the index date is rejected (no post-index events). Aligned only when its own date is on or before the index date.
+  missingness: About 45% of participants have the CBC result dated after the index date (not_aligned); a few are blank. Never imputed here.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value; unit taken from the source label)
+  since: 2
+  status: dropped
+  reason: verified (exact source found, 1,027 rows) but only 567 of 1,067 participants (53.1%) have a usable value aligned to the index visit,
+    below the 80% inclusion threshold for additions
+- name: rbc
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: x10E6/uL
+  range: [1.5, 8.5]
+  table: measurement
+  source: lbscat_rbc, Red Blood Cells (RBC) - x10E6/µL
+  plan_source: null
+  label: Red Blood Cells (RBC) - x10E6/µL
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: CBC row. Linked by visit_occurrence_id to the assessment visit (9202), but its own date is often after study_visit_date (result
+    date), and a row dated after the index date is rejected (no post-index events). Aligned only when its own date is on or before the index date.
+  missingness: About 45% of participants have the CBC result dated after the index date (not_aligned); a few are blank. Never imputed here.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value; unit taken from the source label)
+  since: 2
+  status: dropped
+  reason: verified (exact source found, 1,027 rows) but only 568 of 1,067 participants (53.2%) have a usable value aligned to the index visit,
+    below the 80% inclusion threshold for additions
+- name: rdw
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: '%'
+  range: [9, 40]
+  table: measurement
+  source: lbscat_rdw, RDW - %
+  plan_source: null
+  label: RDW - %
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: CBC row. Linked by visit_occurrence_id to the assessment visit (9202), but its own date is often after study_visit_date (result
+    date), and a row dated after the index date is rejected (no post-index events). Aligned only when its own date is on or before the index date.
+  missingness: About 45% of participants have the CBC result dated after the index date (not_aligned); a few are blank. Never imputed here.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value; unit taken from the source label)
+  since: 2
+  status: dropped
+  reason: verified (exact source found, 1,027 rows) but only 568 of 1,067 participants (53.2%) have a usable value aligned to the index visit,
+    below the 80% inclusion threshold for additions
+- name: wbc
+  group: other_lab
+  kind: numeric
+  dtype: float
+  unit: x10E3/uL
+  range: [0.5, 100]
+  table: measurement
+  source: lbscat_wbc, White Blood Cells (WBC) - x10E3/µL
+  plan_source: null
+  label: White Blood Cells (WBC) - x10E3/µL
+  omop:
+    selector_column: measurement_source_value
+    value_column: value_as_number
+    unit_column: unit_source_value
+    date_column: measurement_date
+    visit_column: visit_occurrence_id
+  temporal_rule: CBC row. Linked by visit_occurrence_id to the assessment visit (9202), but its own date is often after study_visit_date (result
+    date), and a row dated after the index date is rejected (no post-index events). Aligned only when its own date is on or before the index date.
+  missingness: About 45% of participants have the CBC result dated after the index date (not_aligned); a few are blank. Never imputed here.
+  leakage: Routine chemistry / haematology value at the visit; not group-defining. Liver, kidney and electrolyte values can reflect diabetes complications
+    or treatment (for example metformin), but no medication field is used.
+  codebook: n/a (laboratory value; unit taken from the source label)
+  since: 2
+  status: dropped
+  reason: verified (exact source found, 1,027 rows) but only 568 of 1,067 participants (53.2%) have a usable value aligned to the index visit,
+    below the 80% inclusion threshold for additions
+- name: education_level
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxed1, What is the highest grade or level of scho
+  code: pxed1
+  plan_source: pxed1
+  label: What is the highest grade or level of scho
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: optional SDOH / diet item (plan section
+    4). Highest grade / level of school. Codes look like grade numbers but no codebook is local, so they are NOT treated as ordered.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 2
+  status: verified
+  reason: exact source found (900 rows, 900 participants); unit blank in source; usable aligned value for 893 of 1,067 participants (83.7%)
+- name: living_situation
+  group: survey
+  kind: categorical
+  dtype: string (source response code)
+  unit: code
+  range: null
+  table: observation
+  source: pxhi1, What is your living situation today?
+  code: pxhi1
+  plan_source: pxhi1
+  label: What is your living situation today?
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: optional SDOH / diet item (plan section
+    4). The plan lists pxhi1 as a health-insurance item, but its real label is ''What is your living situation today?'' (housing). Used exactly
+    as labelled in the data.'
+  codebook: 'Not in the local payload: observation.csv and the metadata files carry no value labels (qualifier_source_value holds the instrument
+    name, not response labels). Codes are therefore kept as UNORDERED categorical strings (source response code); no ordering is assumed.'
+  since: 2
+  status: verified
+  reason: exact source found (900 rows, 900 participants); unit blank in source; usable aligned value for 893 of 1,067 participants (83.7%)
+- name: diet_score
+  group: survey
+  kind: numeric
+  dtype: float
+  unit: points
+  range: [-30, 30]
+  table: observation
+  source: dietscore, Diet score
+  code: dietscore
+  plan_source: dietscore
+  label: Diet score
+  omop:
+    selector_column: observation_source_value
+    value_column: value_as_string
+    unit_column: unit_source_value
+    date_column: observation_date
+    visit_column: visit_occurrence_id
+  temporal_rule: Questionnaire answer. Linked to the assessment visit (9202) by visit_occurrence_id, or same calendar day as study_visit_date
+    when the id is unresolved. Completion before the index date inside the same encounter is kept; after the index date is rejected. Conflicting
+    repeats leave the cell empty (qc_failed).
+  missingness: Absent when the instrument was not completed or skipped by instrument logic (not_collected); non-substantive answers 555/777/888
+    are kept as response codes, not treated as missing.
+  leakage: 'Self-reported SDOH / lifestyle answer, not a diagnosis, treatment, or group-defining item (those, e.g. mhterm_*, cmtrt_*, dml*, paid*,
+    are excluded). May proxy recruitment balance (site, education); a limitation, not a leak. Instrument: optional SDOH / diet item (plan section
+    4). Computed diet score (range about -20 to 17). Not reproducible from diet1-diet9 as coded (many identical item patterns map to different
+    scores), so its derivation is unknown; the plan says keep it distinct from the items and do not assume it is a validated outcome. Treated
+    as a numeric score because its label says so. VALUE COLUMN: value_as_number is EMPTY for every negative score (644 of 991 rows) while value_as_string
+    holds all values (-20 to 17), so the full value is read from value_as_string and parsed as a number; value_as_number would silently keep only
+    the non-negative scores.'
+  codebook: Numeric value; no codebook needed except units/range (not local; bounds are plausibility limits).
+  since: 2
+  hold: 'HELD OUT of v2: a numeric score legitimately takes the values -1, -9 and other negatives, which the contract validator rejects as missing-value
+    sentinels (-1, -9, -99, -999, -9999; INTERFACE.md: missing is never -1). The score is also not reproducible from diet1-diet9 and has no local
+    codebook. Re-enable only if the contract exempts declared score features (needs your decision), or after the derivation is known.'
+  status: dropped
+  reason: 'HELD OUT of v2: a numeric score legitimately takes the values -1, -9 and other negatives, which the contract validator rejects as missing-value
+    sentinels (-1, -9, -99, -999, -9999; INTERFACE.md: missing is never -1). The score is also not reproducible from diet1-diet9 and has no local
+    codebook. Re-enable only if the contract exempts declared score features (needs your decision), or after the derivation is known.'
+candidates:
+- table: observation
+  code: pxpa1
+  proposed_group: survey
+  why: Plan lists pxpa1-pxpa4 as physical-activity items 'only if codebook and leakage review approve'. The real labels are yes/no questions about
+    DELAYING medical care, not physical activity, and no codebook is local. Held for your approval (could be added as delayed-care items).
+- table: observation
+  code: pxpa2
+  proposed_group: survey
+  why: Plan lists pxpa1-pxpa4 as physical-activity items 'only if codebook and leakage review approve'. The real labels are yes/no questions about
+    DELAYING medical care, not physical activity, and no codebook is local. Held for your approval (could be added as delayed-care items).
+- table: observation
+  code: pxpa3
+  proposed_group: survey
+  why: Plan lists pxpa1-pxpa4 as physical-activity items 'only if codebook and leakage review approve'. The real labels are yes/no questions about
+    DELAYING medical care, not physical activity, and no codebook is local. Held for your approval (could be added as delayed-care items).
+- table: observation
+  code: pxpa4
+  proposed_group: survey
+  why: Plan lists pxpa1-pxpa4 as physical-activity items 'only if codebook and leakage review approve'. The real labels are yes/no questions about
+    DELAYING medical care, not physical activity, and no codebook is local. Held for your approval (could be added as delayed-care items).
+- table: observation
+  code: pxhic1
+  proposed_group: survey
+  why: Possible intended health-insurance items (the plan wrote pxhi1, the data has the pxhic family). NOT substituted for pxhi1; needs your approval.
+- table: observation
+  code: pxhic2
+  proposed_group: survey
+  why: Possible intended health-insurance items (the plan wrote pxhi1, the data has the pxhic family). NOT substituted for pxhi1; needs your approval.
+- table: observation
+  code: pxhic3
+  proposed_group: survey
+  why: Possible intended health-insurance items (the plan wrote pxhi1, the data has the pxhic family). NOT substituted for pxhi1; needs your approval.
+- table: observation
+  code: pxhic4
+  proposed_group: survey
+  why: Possible intended health-insurance items (the plan wrote pxhi1, the data has the pxhic family). NOT substituted for pxhi1; needs your approval.
+- table: observation
+  code: pxhic5
+  proposed_group: survey
+  why: Possible intended health-insurance items (the plan wrote pxhi1, the data has the pxhic family). NOT substituted for pxhi1; needs your approval.
+- table: observation
+  code: pxhic7
+  proposed_group: survey
+  why: Possible intended health-insurance items (the plan wrote pxhi1, the data has the pxhic family). NOT substituted for pxhi1; needs your approval.
+- table: observation
+  code: pxhic8
+  proposed_group: survey
+  why: Possible intended health-insurance items (the plan wrote pxhi1, the data has the pxhic family). NOT substituted for pxhi1; needs your approval.
+- table: observation
+  code: sualckncf
+  proposed_group: survey
+  why: 'plan: only if codebook and leakage review approve (substance use)'
+- table: observation
+  code: susmkncf
+  proposed_group: survey
+  why: 'plan: only if codebook and leakage review approve (substance use)'
+- table: observation
+  code: suvpkncf1
+  proposed_group: survey
+  why: 'plan: only if codebook and leakage review approve (substance use)'

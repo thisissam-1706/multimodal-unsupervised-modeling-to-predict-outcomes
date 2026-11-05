@@ -1,0 +1,69 @@
+# Index-visit rule (A3), FINAL for handoff/v1. Fixed from visit ids, dates and registry ranges only: no label, split
+# or model output was read to choose it, and it must not be changed after seeing model results (a change = new version).
+# Implemented once, in src/align.py (attach) and src/features.py (repeat selection); measured in reports/index_rule_measurement.md
+# (regenerate with `python data_pipeline/src/rule_paths.py --report`).
+version: 2
+release: v2.0.0
+
+index:
+  table: participants.tsv
+  date_column: study_visit_date          # exactly one index date per participant
+  join: participant_id == person_id, both compared as text, never cast
+
+visit_types:
+  "9202":  assessment visit (visit_source_value pacmpdat); one per participant; always starts on study_visit_date
+  "32036": lab-draw visit (visit_source_value lbdattim2); 1,035 participants; starts on study_visit_date for 969 of them
+
+attach:                       # evaluated per event row
+  path_1_visit_id: >
+    If visit_occurrence_id exists in visit_occurrence.csv AND that visit belongs to the same person (path "linked"),
+    the row is aligned iff the visit's visit_start_date == study_visit_date.
+  path_2_same_calendar_day: >
+    Otherwise (path id_not_in_visit_table, id_belongs_to_other_person or no_visit_id) the row is aligned iff its own date
+    (measurement_date / observation_date) == study_visit_date.
+  post_index: >
+    In both paths a row whose own date is after study_visit_date is rejected (status post_index).
+  not_aligned: >
+    Everything else is not aligned: post_index; other_day (the row, or its visit, is on a different day before the index date);
+    no_date (unreadable date). If a participant has rows for a field but none aligned, the cell is empty with reason not_aligned.
+  survey_lookback: >
+    No cap. A questionnaire completed before the clinic visit inside the index encounter (linked to the assessment visit)
+    stays aligned however early (deepest observed: 225 days). Capping would be a new choice and needs a new version.
+  lab_other_day: >
+    Same-visit data only. A lab-draw visit on another day is never attached, even when it is before the index date.
+  offsets: reported as aggregate counts only (reports/index_rule_measurement.md); an offset is never a feature.
+
+repeats:                      # at most one value per participant per feature
+  numeric_fields:
+    selection: QC-based, then median
+    steps:
+      - keep aligned rows only
+      - drop rows that fail QC (not parseable, outside the registry plausible range, or value_source_value == "Invalid")
+      - median of the remaining values (a single value is returned unchanged)
+      - if rows exist but none pass QC the cell is empty with reason qc_failed (never 0, never -1)
+  blood_pressure_and_pulse: >
+    Not combined. Reading 1 and reading 2 are separate registry features (sys_bp_1/dia_bp_1/pulse_1 and
+    sys_bp_2/dia_bp_2/pulse_2) because they are separate source fields. If one field itself repeated at the index visit the
+    numeric rule above would apply. Measured: no such repeat exists in the local data.
+  categorical_fields: identical repeats collapse to that value; conflicting repeats leave the cell empty (reason qc_failed)
+  measured_in_local_data: >
+    No participant has more than one aligned row for any anthropometry, vital or lab field. One participant has an identical
+    duplicate years_of_education row. The repeat rules are safeguards that change no value in v1.
+
+missing_reasons:                # exactly one reason per empty cell, none for a filled cell
+  not_collected: no row exists for the participant, or the aligned row has no value
+  not_in_local_payload: the source table does not cover the participant (unused: every clinical table covers all participants)
+  parse_failure: a value exists but cannot be parsed as the declared kind
+  qc_failed: parsed but implausible / flagged Invalid / conflicting repeats
+  not_aligned: rows exist for the participant and field but none can be attached to the index visit
+
+eligibility:                    # participants allowed into features.csv (all 1,067 pass locally)
+  - participant_id present and unique (duplicates stop the build)
+  - study_group is one of the four classes
+  - recommended_split maps to train / val / test
+  - study_visit_date parses
+  - participant_id exists in person.person_id
+  rule: an ineligible participant is dropped and counted in reports/handoff_build.md; it is never imputed or relabelled
+
+invalid_values:
+  never: [0 as missing, -1 as missing, imputation, unit conversion without a recorded rule]
