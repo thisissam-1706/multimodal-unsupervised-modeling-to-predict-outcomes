@@ -1,0 +1,87 @@
+# Written by modeling/src/model_select.py. Do not edit numbers by hand.
+locked: false
+date: '2026-11-05'
+handoff_dir: handoff/mock
+schema_version: mock
+selection_metric: val_macro_f1_mean
+class_order:
+- healthy
+- pre_diabetes_lifestyle_controlled
+- oral_medication_and_or_non_insulin_injectable_medication_controlled
+- insulin_dependent
+mock_data: true
+ae:
+  config:
+    seed: 0
+    handoff_dir: handoff/mock
+    model:
+      hidden:
+      - 256
+      - 128
+      latent: 64
+      head_hidden: 32
+      dropout: 0.1
+      activation: relu
+    pretrain:
+      epochs: 100
+      lr: 0.001
+      weight_decay: 1.0e-05
+      batch_size: 64
+      mask_rate: 0.2
+      huber_delta: 1.0
+    finetune:
+      epochs: 200
+      lr: 0.001
+      weight_decay: 0.001
+      batch_size: 64
+      patience: 20
+      recon_weight: 0.0
+  seeds:
+  - 0
+  - 1
+  - 2
+  grid_params:
+    model.hidden:
+    - 256
+    - 128
+    model.dropout: 0.1
+    finetune.weight_decay: 0.001
+    pretrain.mask_rate: 0.2
+    finetune.lr: 0.001
+  best_epochs:
+  - 16
+  - 20
+  - 21
+  val_macro_f1_mean: 0.7996230819665063
+  val_macro_f1_std: 0.0040037206485587454
+  calibration:
+    method: temperature
+    temperature: 1.3106108193767823
+logreg:
+  params:
+    C: 1.0
+  seeds:
+  - 0
+  val_macro_f1_mean: 0.7488241097807282
+  val_macro_f1_std: 0.0
+  calibration:
+    method: isotonic
+    artifact: modeling/artifacts/calibrators.joblib
+hgb:
+  params:
+    learning_rate: 0.1
+    max_iter: 300
+    max_leaf_nodes: 15
+    max_depth: 3
+    l2_regularization: 1.0
+  seeds:
+  - 0
+  - 1
+  - 2
+  val_macro_f1_mean: 0.7120115698097349
+  val_macro_f1_std: 0.0
+  calibration:
+    method: isotonic
+    artifact: modeling/artifacts/calibrators.joblib
+note: 'Calibration fitted and scored on the same val rows: optimistic. Test split
+  never loaded during selection.'

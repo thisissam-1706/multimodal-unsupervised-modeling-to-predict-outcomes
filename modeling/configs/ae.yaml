@@ -1,0 +1,26 @@
+# Masked denoising autoencoder + 4-class head (task B4). Loaded by modeling/src/train.py.
+seed: 0
+handoff_dir: handoff/mock   # change to handoff/v1 when Person A releases it
+
+model:
+  hidden: [256, 128]        # encoder hidden layers; latent follows
+  latent: 64
+  head_hidden: 32
+  dropout: 0.1
+  activation: relu          # relu | gelu | elu
+
+pretrain:                   # step 1: no labels used
+  epochs: 100
+  lr: 1.0e-3
+  weight_decay: 1.0e-5
+  batch_size: 64
+  mask_rate: 0.2            # fraction of observed features hidden per row
+  huber_delta: 1.0
+
+finetune:                   # step 2: encoder + head, class-weighted cross-entropy
+  epochs: 200
+  lr: 5.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 64
+  patience: 20              # early stopping on val macro-F1
+  recon_weight: 0.0         # >0 keeps a masked reconstruction term during fine-tuning
