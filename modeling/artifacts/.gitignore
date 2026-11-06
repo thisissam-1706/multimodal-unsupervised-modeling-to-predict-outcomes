@@ -1,0 +1,3 @@
+# Fitted objects are derived from participant data: never commit them.
+*
+!.gitignore
