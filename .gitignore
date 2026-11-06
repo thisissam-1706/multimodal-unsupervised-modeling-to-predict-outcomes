@@ -6,3 +6,4 @@ handoff/v*/
 *.pt
 *.pkl
 *.parquet
+.venv/
