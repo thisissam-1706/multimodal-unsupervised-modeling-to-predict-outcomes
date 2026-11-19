@@ -1,4 +1,58 @@
-# Model selection (B5)
+# Model selection
+
+> **Updated 2026-11-19.** Selection is now done by **repeated cross-validation on train+val**, not by a single validation split with validation-based early stopping. The proposed choice is below; the original single-split selection (B5) is kept further down as *Legacy* and is superseded for model choice. Nothing here is locked (`locked: false` in `modeling/configs/selected.yaml`). The test split was not loaded.
+
+## Proposed choice (from `modeling/reports/cv_comparison.md`)
+
+| Item | Value |
+|---|---|
+| Protocol | StratifiedKFold(5) x seeds 0, 1, 2 on train+val pooled (907 rows) = 15 folds. Every imputer, scaler, vocabulary and model is fitted inside each fold's training part. |
+| Selection metric | Mean CV macro-F1 over the 15 folds. |
+| Feature set | `A_clinical`: the 24 non-survey features (no survey items or scores); raw values with NaN handled natively. |
+| Model | `hgb_monotone`: cumulative ordinal model (3 binary HistGradientBoosting models for P(y>k)), `max_depth=2`, `learning_rate=0.05`, `max_iter=200`, `min_samples_leaf=20`, `l2_regularization=1.0`, no early stopping, balanced 4-class weights, `hba1c` and `glucose` constrained to be increasing. |
+| Seeds | CV seeds 0, 1, 2. Model seed 0 (deterministic; the seed has no effect). |
+| Threshold offsets | None (all four offsets 0). |
+| CV result | macro-F1 0.499 ± 0.042, accuracy 0.525 ± 0.035, balanced accuracy 0.506 ± 0.048, adjacent-class accuracy 0.895 ± 0.015, QWK 0.602 ± 0.042, log-loss 1.365 ± 0.224. Recall per class 0.600 / 0.408 / 0.533 / 0.481. |
+| Reference | Clinical-only logistic regression (C=1): macro-F1 0.464 ± 0.053, log-loss 1.168. Paired macro-F1 difference +0.035 ± 0.045, better in 12 of 15 folds. |
+
+**How strong is this choice?** It is the top row of a noisy ranking. The paired difference to the reference is just above the 0.03 noise level and smaller than its own fold-to-fold std, and the ordinal and other HGB rows are within about 0.02 of it. Its log-loss is worse than the reference by about 0.2, so its probabilities are less well calibrated. Picking the best row of the same CV that scored it is optimistically biased; the CV number is an upper-leaning estimate, and only the single test run is unbiased. The monotone constraint made no measurable difference (at depth 3 the unconstrained twin scored within 0.002 of the constrained model on both feature sets); it stays as a domain prior, not as a performance gain.
+
+**Threshold (class-bias) offsets were tried and not adopted.** Four log-prior offsets fitted by nested CV (inner CV on each outer training part) moved macro-F1 by +0.011 ± 0.032 (logreg), +0.008 ± 0.019 (ordinal) and −0.013 ± 0.029 (this HGB model). Recall for the pre-diabetes class fell in every case (this model: 0.408 → 0.360). The offsets mostly moved predictions from insulin to oral-medication.
+
+## Why selection changed
+
+The earlier selection used one validation split (160 rows) for everything: grid selection, early stopping and calibration. That has three problems.
+
+- **The autoencoder's validation score is optimistic.** The AE early-stops on validation macro-F1 (`patience: 20`; best epochs 12, 18 and 5 for the three seeds), so the best epoch is picked by the very metric it is then scored on, on the same rows. The 0.540 validation macro-F1 below is therefore an in-sample-leaning number, not an out-of-sample estimate, and it must not be compared with the cross-validated numbers above.
+- **Calibration was scored on its own fitting rows.** The isotonic and temperature calibrators were fitted and evaluated on the same validation rows, so the *after* numbers in the legacy tables are optimistic (already noted there).
+- **One 160-row split is noisy.** With 40 pre-diabetes rows, a recall near 0.34 has a 95% interval of about ±0.15 from sampling alone. As a check, the legacy logistic regression (C=0.01, all features) scored 0.505 on validation but 0.458 ± 0.037 in repeated CV (feature set B, same C).
+
+The AE has **not** been run through the repeated CV, so it is not a candidate in the table above. A fair comparison would need early stopping inside each training fold (an inner validation part), which is not built yet.
+
+## Changes to raise at S2
+
+Deviations from the original plan (`modeling/README.md`, `WORKSPLIT.md` B1–B8) that need discussion with Person A before `locked: true`:
+
+1. **Selection protocol (B5).** Plan: select and calibrate on the validation split. Now: repeated 5-fold CV x 3 seeds on train+val pooled. The official `val` rows are used as training data in CV, so they are no longer an independent check, and the test split is the only held-out data. Person A: is pooling the recommended train/val split acceptable?
+2. **Final fit on train+val (B8).** Plan: refit on train only. Proposed: refit on all 907 train+val rows. `final_run.py` still refits on train only and does not know the new feature set, model or offsets, so it must be updated (before locking, not run) or this choice is not what the test run would evaluate.
+3. **Survey items reduced (B2/A7).** The original setup fed all 43 survey items, one-hot, to the models (set B). In CV this hurts logistic regression (macro-F1 −0.038 ± 0.039 at C=1) and does not help any other model. A reduced set (`C_clinical_survey_scores`: four sum scores, `years_education`, `marital_status`) was tried and also showed no consistent gain. The proposed model uses **no survey features at all**. Scores assume items within an instrument share direction and scale, which cannot be checked because the handoff has no codebook; codes 555, 777 and 888 are treated as missing (refused / don't know). Person A: can you confirm those codes and share the survey data dictionary?
+4. **Ordinal model (B3).** Plan: majority, multinomial logistic regression, gradient-boosted trees. Added: ordinal cumulative models (Frank & Hall) for logistic regression and HGB, a grouped-penalty logistic regression, and monotone constraints on `hba1c` and `glucose`. Treating the four classes as ordered severity is an assumption; the monotone constraint is a domain prior, not estimated from labels, and sklearn cannot apply it to multiclass HGB, which is why the chosen model is the cumulative form. The ordinal weighting was changed once after seeing CV output (per-binary balancing gave incoherent probabilities; now shared 4-class balanced weights).
+5. **Threshold (class-bias) tuning.** Not in the plan. Tried with nested CV, not adopted (offsets = 0).
+6. **Preprocessing (B2).** Missing-indicator columns are added only for numerics with missing values in the training part, chosen inside each fold. The tree model skips imputation, scaling and indicators entirely and uses raw NaN.
+7. **Metrics (B6).** Added adjacent-class accuracy and quadratic weighted kappa, reported as mean ± std over folds with paired fold differences. Macro-F1 stays primary.
+8. **Calibration (B5).** Not decided for the proposed model. The legacy calibrators were fitted on validation rows and do not apply to a train+val fit; the proposed model's log-loss is the weakest of the top candidates. Options: no calibration, or calibration with nested CV.
+9. **Lab ablation (B7).** Not redone under the new protocol. `A_clinical` includes `hba1c` and `glucose` (group `glycemic`); `reports/ablation.md` still describes the legacy models.
+10. **Autoencoder (B4).** Kept unchanged but not part of the new comparison (see above). The proposed final model is not the AE.
+11. **Housekeeping.** `modeling/tests/test_model_select.py::test_test_rows_never_read` currently fails (its temporary folder name does not match the schema version, so the validator rejects it). I have not checked whether it also fails on the last commit.
+
+## Seeds, files and how to reproduce
+
+- CV seeds: 0, 1, 2 (`cv.iter_folds`). Report generator: `python modeling/src/cv_report.py` (about 10 minutes).
+- The chosen configuration is recorded in `modeling/configs/selected.yaml` under `cv_selection`. The older `ae`, `logreg` and `hgb` blocks are unchanged.
+
+---
+
+# Legacy: single-split validation selection (B5), superseded
 
 - Date: 2026-11-19
 - Handoff: `handoff/v1` (schema version `v1`)
