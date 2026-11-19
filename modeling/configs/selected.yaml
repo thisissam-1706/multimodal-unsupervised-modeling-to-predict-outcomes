@@ -1,15 +1,15 @@
 # Written by modeling/src/model_select.py. Do not edit numbers by hand.
 locked: false
-date: '2026-11-05'
-handoff_dir: handoff/mock
-schema_version: mock
+date: '2026-11-19'
+handoff_dir: handoff/v1
+schema_version: v1
 selection_metric: val_macro_f1_mean
 class_order:
 - healthy
 - pre_diabetes_lifestyle_controlled
 - oral_medication_and_or_non_insulin_injectable_medication_controlled
 - insulin_dependent
-mock_data: true
+mock_data: false
 ae:
   config:
     seed: 0
@@ -31,7 +31,7 @@ ae:
       huber_delta: 1.0
     finetune:
       epochs: 200
-      lr: 0.001
+      lr: 0.0005
       weight_decay: 0.001
       batch_size: 64
       patience: 20
@@ -47,29 +47,29 @@ ae:
     model.dropout: 0.1
     finetune.weight_decay: 0.001
     pretrain.mask_rate: 0.2
-    finetune.lr: 0.001
+    finetune.lr: 0.0005
   best_epochs:
-  - 16
-  - 20
-  - 21
-  val_macro_f1_mean: 0.7996230819665063
-  val_macro_f1_std: 0.0040037206485587454
+  - 12
+  - 18
+  - 5
+  val_macro_f1_mean: 0.5402071403704344
+  val_macro_f1_std: 0.017770973452586145
   calibration:
     method: temperature
-    temperature: 1.3106108193767823
+    temperature: 1.3303873616022108
 logreg:
   params:
-    C: 1.0
+    C: 0.01
   seeds:
   - 0
-  val_macro_f1_mean: 0.7488241097807282
+  val_macro_f1_mean: 0.5054439755932293
   val_macro_f1_std: 0.0
   calibration:
     method: isotonic
     artifact: modeling/artifacts/calibrators.joblib
 hgb:
   params:
-    learning_rate: 0.1
+    learning_rate: 0.05
     max_iter: 300
     max_leaf_nodes: 15
     max_depth: 3
@@ -78,7 +78,7 @@ hgb:
   - 0
   - 1
   - 2
-  val_macro_f1_mean: 0.7120115698097349
+  val_macro_f1_mean: 0.4178055826189308
   val_macro_f1_std: 0.0
   calibration:
     method: isotonic
