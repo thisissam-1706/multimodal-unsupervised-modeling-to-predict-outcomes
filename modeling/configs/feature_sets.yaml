@@ -1,0 +1,41 @@
+# Named feature sets, built from handoff/v1 columns only (no new data sources).
+# Read by modeling/src/features.py. Items/scores are chosen from the instrument structure
+# (item name prefixes), never from association with the label.
+handoff_dir: handoff/v1
+
+# Survey codes meaning refused / don't know. Treated as missing, never as numbers.
+sentinel_codes: ["555", "777", "888"]
+
+# Missing indicators: a numeric column gets one iff it has >=1 missing value in the TRAINING
+# rows of the fold (decided inside fit, so held-out rows never influence the column set).
+indicators: numeric_with_missing_in_train
+
+# Survey scores, computed per row (no fitting). Items are ordinal codes read as numbers,
+# sentinels -> missing. Score = sum of observed items, scaled up to the full item count
+# (so it equals the plain sum when every item is observed), and NaN when fewer than
+# min_observed_frac of the items are observed.
+scores:
+  food_security:  {prefix: food_security_,  n_items: 5,  exclude: []}
+  access_to_care: {prefix: access_to_care_, n_items: 10, exclude: [3, 6]}
+  neighborhood:   {prefix: neighborhood_,   n_items: 17, exclude: []}
+  diet:           {prefix: diet_item_,      n_items: 9,  exclude: []}
+min_observed_frac: 0.5
+
+sets:
+  A_clinical:
+    description: all non-survey features (24) + missing indicators
+    clinical: true
+  B_clinical_onehot_survey:
+    description: reference = clinical + all 43 survey items (one-hot / years_education numeric)
+    clinical: true
+    survey_raw: true
+  C_clinical_survey_scores:
+    description: A + survey scores + years_education + marital_status one-hot
+    clinical: true
+    scores: [food_security, access_to_care, neighborhood, diet]
+    numeric_survey: [years_education]
+    onehot: [marital_status]
+  D_clinical_engineered:
+    description: A + ratios from existing fields (whr filled from waist/hip where missing)
+    clinical: true
+    engineered: [tg_hdl_ratio, non_hdl, bun_creatinine_ratio, sys_bp_mean, dia_bp_mean, whr_filled]
